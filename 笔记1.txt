@@ -1,0 +1,205 @@
+在页面里实现上传文件不是什么难事，写个form,加上enctype = "multipart/form-data",在写个接收的就可以了，没什么难的，如果要用java.net.HttpURLConnection来实现文件上传，还真有点搞头.:-)
+　　1.先写个servlet把接收到的 HTTP 信息保存在一个文件中， 看一下 form 表单到底封装了什么样的信息。
+
+　　Java代码
+
+　　public void doPost(HttpServletRequest request, HttpServletResponse response)
+
+　　throws ServletException, IOException {
+
+　　//获取输入流，是HTTP协议中的实体内容
+
+　　ServletInputStream  in=request.getInputStream();
+
+　　//缓冲区
+
+　　byte buffer[]=new byte[1024];
+
+　　FileOutputStream out=new FileOutputStream("d:\\test.log");
+
+　　int len=sis.read(buffer, 0, 1024);
+
+　　//把流里的信息循环读入到file.log文件中
+
+　　while( len!=-1 ){
+
+　　out.write(buffer, 0, len);
+
+　　len=in.readLine(buffer, 0, 1024);
+
+　　}
+
+　　out.close();
+
+　　in.close();
+
+　　}
+
+　　来一个form表单。
+
+　　<form name="upform" action="upload.do" method="POST"
+
+　　enctype="multipart/form-data">
+
+　　参数<input type="text" name="username"/><br/>
+
+　　文件1<input type="file" name="file1"/><br/>
+
+　　文件2<input type="file" name="file2"/><br/>
+
+　　<input type="submit" value="Submit" />
+
+　　<br />
+
+　　</form>
+
+　　假如我参数写的内容是hello word,然后二个文件是二个简单的txt文件，上传后test.log里如下
+
+　　-----------------------------7da2e536604c8
+
+　　Content-Disposition: form-data; name="username"
+
+　　hello word
+
+　　-----------------------------7da2e536604c8
+
+　　Content-Disposition: form-data; name="file1"; filename="D:\haha.txt"
+
+　　Content-Type: text/plain
+
+　　haha
+
+　　hahaha
+
+　　-----------------------------7da2e536604c8
+
+　　Content-Disposition: form-data; name="file2"; filename="D:\huhu.txt"
+
+　　Content-Type: text/plain
+
+　　messi
+
+　　huhu
+
+　　-----------------------------7da2e536604c8--
+
+　　研究下规律发现有如下几点特征
+
+　　1.第一行是“ -----------------------------7d92221b604bc ”作为分隔符，然后是“ \r\n ” 回车换行符。 这个7d92221b604bc 分隔符浏览器是随机生成的。
+
+　　2.第二行是Content-Disposition: form-data; name="file2"; filename="D:\huhu.txt";name=对应input的name值，filename对应要上传的文件名（包括路径在内），
+
+　　3.第三行如果是文件就有Content-Type: text/plain；这里上传的是txt文件所以是text/plain,如果上穿的是jpg图片的话就是image/jpg了，可以自己试试看看。
+
+　　然后就是回车换行符。
+
+　　4.在下就是文件或参数的内容或值了。如：hello word。
+
+　　5.最后一行是-----------------------------7da2e536604c8--,注意最后多了二个--;
+
+　　有了这些就可以使用HttpURLConnection来实现上传文件功能了
+
+　　Java代码 public void upload(){
+
+　　List<String> list  = new ArrayList<String>();  //要上传的文件名,如：d:\haha.doc.你要实现自己的业务。我这里就是一个空list.
+
+　　try {
+
+　　String BOUNDARY = "---------7d4a6d158c9"; // 定义数据分隔线
+
+　　URL url = new URL("http://localhost/JobPro/upload.do");
+
+　　HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+
+　　// 发送POST请求必须设置如下两行
+
+　　conn.setDoOutput(true);
+
+　　conn.setDoInput(true);
+
+　　conn.setUseCaches(false);
+
+　　conn.setRequestMethod("POST");
+
+　　conn.setRequestProperty("connection", "Keep-Alive");
+
+　　conn.setRequestProperty("user-agent", "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1; SV1)");
+
+　　conn.setRequestProperty("Charsert", "UTF-8");
+
+　　conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + BOUNDARY);
+
+　　OutputStream out = new DataOutputStream(conn.getOutputStream());
+
+　　byte[] end_data = ("\r\n--" + BOUNDARY + "--\r\n").getBytes();// 定义最后数据分隔线
+
+　　int leng = list.size();
+
+　　for(int i=0;i<leng;i++){
+
+　　String fname = list.get(i);
+
+　　File file = new File(fname);
+
+　　StringBuilder sb = new StringBuilder();
+
+　　sb.append("--");
+
+　　sb.append(BOUNDARY);
+
+　　sb.append("\r\n");
+
+　　sb.append("Content-Disposition: form-data;name=\"file"+i+"\";filename=\""+ file.getName() + "\"\r\n");
+
+　　sb.append("Content-Type:application/octet-stream\r\n\r\n");
+
+　　byte[] data = sb.toString().getBytes();
+
+　　out.write(data);
+
+　　DataInputStream in = new DataInputStream(new FileInputStream(file));
+
+　　int bytes = 0;
+
+　　byte[] bufferOut = new byte[1024];
+
+　　while ((bytes = in.read(bufferOut)) != -1) {
+
+　　out.write(bufferOut, 0, bytes);
+
+　　}
+
+　　out.write("\r\n".getBytes()); //多个文件时，二个文件之间加入这个
+
+　　in.close();
+
+　　}
+
+　　out.write(end_data);
+
+　　out.flush();
+
+　　out.close();
+
+　　// 定义BufferedReader输入流来读取URL的响应
+
+　　BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+
+　　String line = null;
+
+　　while ((line = reader.readLine()) != null) {
+
+　　System.out.println(line);
+
+　　}
+
+　　} catch (Exception e) {
+
+　　System.out.println("发送POST请求出现异常！" + e);
+
+　　e.printStackTrace();
+
+　　}
+
+　　}
+
